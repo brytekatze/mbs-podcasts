@@ -4,11 +4,11 @@ const systemPrompt = `Eres un productor de podcasts. Basado en el texto proporci
 DEBES devolver ÚNICAMENTE un objeto JSON válido con la siguiente estructura exacta:
 {
   "inputs": [
-    { "text": "[etiqueta de emoción] Texto del presentador 1", "voiceId": "VOICE_ID_A" },
-    { "text": "[etiqueta de emoción] Texto del presentador 2", "voiceId": "VOICE_ID_B" }
+    { "text": "[etiqueta de emoción] Texto del presentador 1", "voiceId": "${process.env.VOICE_ID_A}" },
+    { "text": "[etiqueta de emoción] Texto del presentador 2", "voiceId": "${process.env.VOICE_ID_B}" }
   ]
 }
-Usa 'VOICE_ID_A' para el Host A y 'VOICE_ID_B' para el Host B. Puedes usar etiquetas de emoción en inglés entre corchetes al inicio del texto, como [cheerfully], [excited], o [thoughtful].`;
+Usa exactamente el ID ${process.env.VOICE_ID_A} para el Host A y el ID ${process.env.VOICE_ID_B} para el Host B. Puedes usar etiquetas de emoción en inglés entre corchetes al inicio del texto, como [cheerfully], [excited], o [thoughtful].`;
 
 type GeneratedScript = {
   inputs: Array<{
@@ -50,19 +50,19 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!process.env.OPENWEBUI_BASE_URL || !process.env.OPENWEBUI_API_KEY) {
+    if (!process.env.ABACUS_BASE_URL || !process.env.ABACUS_API_KEY) {
       return Response.json(
         {
           error:
-            "Faltan configurar OPENWEBUI_BASE_URL y OPENWEBUI_API_KEY en el entorno del servidor.",
+            "Faltan configurar ABACUS_BASE_URL y ABACUS_API_KEY en el entorno del servidor.",
         },
         { status: 500 },
       );
     }
 
     const openai = new OpenAI({
-      baseURL: process.env.OPENWEBUI_BASE_URL,
-      apiKey: process.env.OPENWEBUI_API_KEY,
+      baseURL: process.env.ABACUS_BASE_URL,
+      apiKey: process.env.ABACUS_API_KEY,
     });
 
     const userContent = `Texto de los archivos:\n${sourceText}`;
