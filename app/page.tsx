@@ -7,6 +7,9 @@ const acceptedExtensions = /\.(pdf|doc|docx|txt|md|rtf)$/i;
 export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [script, setScript] = useState("");
+  const [error, setError] = useState("");
 
   const addFiles = (selectedFiles: FileList | File[]) => {
     const documents = Array.from(selectedFiles).filter((file) =>
@@ -39,6 +42,44 @@ export default function Home() {
     setFiles((currentFiles) =>
       currentFiles.filter((file) => file.name !== fileName),
     );
+  };
+
+  const generateScript = async () => {
+    if (files.length === 0 || isGenerating) return;
+
+    setIsGenerating(true);
+    setScript("");
+    setError("");
+
+    try {
+      const extractedText = (
+        await Promise.all(files.map((file) => file.text()))
+      ).join("\n\n");
+
+      const requestBody = { text: extractedText };
+
+      const response = await fetch("/api/generate-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data: { script?: string; error?: string } = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "No se pudo generar el guion.");
+      }
+
+      setScript(data.script ?? "");
+    } catch (generationError) {
+      setError(
+        generationError instanceof Error
+          ? generationError.message
+          : "Ocurrió un error al generar el guion.",
+      );
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -176,20 +217,37 @@ export default function Home() {
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                disabled={files.length === 0}
+                onClick={generateScript}
+                disabled={files.length === 0 || isGenerating}
                 className="rounded-xl bg-violet-600 px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/20 transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:shadow-none"
               >
-                Generar Podcast
-              </button>
-
-              <button
-                type="button"
-                disabled={files.length === 0}
-                className="rounded-xl border border-violet-400/30 bg-violet-400/10 px-6 py-3.5 text-sm font-semibold text-violet-200 transition hover:bg-violet-400/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-slate-500"
-              >
-                Generar podcasts
+                {isGenerating ? "Generando guion..." : "Generar Podcast"}
               </button>
             </div>
+
+            {error && (
+              <p role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+                {error}
+              </p>
+            )}
+
+            {script && (
+              <section
+                aria-labelledby="generated-script-title"
+                className="rounded-2xl border border-violet-400/20 bg-slate-950/60 p-5 sm:p-6"
+              >
+                <h2
+                  id="generated-script-title"
+                  className="mb-4 text-lg font-semibold text-white"
+                >
+                  Guion generado
+                </h2>
+                <pre className="whitespace-pre-wrap font-sans text-sm leading-7 text-slate-200">
+                  {script}
+                </pre>
+              </section>
+            )}
+
           </div>
         </section>
       </div>
