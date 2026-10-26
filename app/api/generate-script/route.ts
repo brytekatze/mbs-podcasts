@@ -1,7 +1,21 @@
 import OpenAI from "openai";
 
-const systemPrompt =
-  "Eres un productor de podcasts. Basado en el texto proporcionado, escribe un guion en formato de diálogo fluido, casual y entretenido entre dos presentadores (Host A y Host B) que analizan el contenido. Devuelve únicamente el diálogo.";
+const systemPrompt = `Eres un productor de podcasts. Basado en el texto proporcionado, escribe un guion en formato de diálogo fluido y casual entre dos presentadores.
+DEBES devolver ÚNICAMENTE un objeto JSON válido con la siguiente estructura exacta:
+{
+  "inputs": [
+    { "text": "[etiqueta de emoción] Texto del presentador 1", "voiceId": "VOICE_ID_A" },
+    { "text": "[etiqueta de emoción] Texto del presentador 2", "voiceId": "VOICE_ID_B" }
+  ]
+}
+Usa 'VOICE_ID_A' para el Host A y 'VOICE_ID_B' para el Host B. Puedes usar etiquetas de emoción en inglés entre corchetes al inicio del texto, como [cheerfully], [excited], o [thoughtful].`;
+
+type GeneratedScript = {
+  inputs: Array<{
+    text: string;
+    voiceId: string;
+  }>;
+};
 
 type UploadedFile = {
   name?: unknown;
@@ -56,7 +70,7 @@ export async function POST(request: Request) {
     const assistantMessageId = crypto.randomUUID();
 
     const requestBody = {
-      model: "gemma4:26b",
+      model: "gpt-5.6-luna",
       temperature: 0.7,
       stream: false,
       messages: [
@@ -85,11 +99,40 @@ export async function POST(request: Request) {
 
     const completion = await openai.chat.completions.create(requestBody);
 
-    const script = completion.choices[0]?.message.content?.trim();
+    const scriptText = completion.choices[0]?.message.content?.trim();
 
-    if (!script) {
+    if (!scriptText) {
       return Response.json(
         { error: "Open WebUI no devolvió un guion." },
+        { status: 502 },
+      );
+    }
+
+    let script: GeneratedScript;
+
+    try {
+      const parsedScript: unknown = JSON.parse(scriptText);
+
+      if (
+        typeof parsedScript !== "object" ||
+        parsedScript === null ||
+        !Array.isArray((parsedScript as { inputs?: unknown }).inputs) ||
+        !(parsedScript as { inputs: unknown[] }).inputs.every(
+          (input) =>
+            typeof input === "object" &&
+            input !== null &&
+            typeof (input as { text?: unknown }).text === "string" &&
+            typeof (input as { voiceId?: unknown }).voiceId === "string",
+        )
+      ) {
+        throw new Error("La respuesta no tiene la estructura esperada.");
+      }
+
+      script = parsedScript as GeneratedScript;
+    } catch (error) {
+      console.error("La respuesta del LLM no es JSON válido:", error);
+      return Response.json(
+        { error: "El modelo devolvió un guion con formato inválido." },
         { status: 502 },
       );
     }

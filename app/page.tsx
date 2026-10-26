@@ -4,11 +4,18 @@ import { useState, type ChangeEvent, type DragEvent } from "react";
 
 const acceptedExtensions = /\.(pdf|doc|docx|txt|md|rtf)$/i;
 
+type GeneratedScript = {
+  inputs: Array<{
+    text: string;
+    voiceId: string;
+  }>;
+};
+
 export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [script, setScript] = useState("");
+  const [script, setScript] = useState<GeneratedScript | null>(null);
   const [error, setError] = useState("");
 
   const addFiles = (selectedFiles: FileList | File[]) => {
@@ -48,7 +55,7 @@ export default function Home() {
     if (files.length === 0 || isGenerating) return;
 
     setIsGenerating(true);
-    setScript("");
+    setScript(null);
     setError("");
 
     try {
@@ -64,13 +71,14 @@ export default function Home() {
         body: JSON.stringify(requestBody),
       });
 
-      const data: { script?: string; error?: string } = await response.json();
+      const data: { script?: GeneratedScript; error?: string } =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(data.error ?? "No se pudo generar el guion.");
       }
 
-      setScript(data.script ?? "");
+      setScript(data.script ?? null);
     } catch (generationError) {
       setError(
         generationError instanceof Error
@@ -243,7 +251,7 @@ export default function Home() {
                   Guion generado
                 </h2>
                 <pre className="whitespace-pre-wrap font-sans text-sm leading-7 text-slate-200">
-                  {script}
+                  {JSON.stringify(script, null, 2)}
                 </pre>
               </section>
             )}
