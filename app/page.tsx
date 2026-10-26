@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, type ChangeEvent, type DragEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+} from "react";
 
 const acceptedExtensions = /\.(pdf|doc|docx|txt|md|rtf)$/i;
 
@@ -15,8 +20,18 @@ export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [script, setScript] = useState<GeneratedScript | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
 
   const addFiles = (selectedFiles: FileList | File[]) => {
     const documents = Array.from(selectedFiles).filter((file) =>
@@ -52,10 +67,12 @@ export default function Home() {
   };
 
   const generateScript = async () => {
-    if (files.length === 0 || isGenerating) return;
+    if (files.length === 0 || isGenerating || isGeneratingAudio) return;
 
     setIsGenerating(true);
+    setIsGeneratingAudio(false);
     setScript(null);
+    setAudioUrl(null);
     setError("");
 
     try {
@@ -78,7 +95,31 @@ export default function Home() {
         throw new Error(data.error ?? "No se pudo generar el guion.");
       }
 
-      setScript(data.script ?? null);
+      if (!data.script) {
+        throw new Error("No se recibió un guion válido.");
+      }
+
+      setScript(data.script);
+
+      setIsGeneratingAudio(true);
+
+      try {
+        const audioResponse = await fetch("/api/generate-audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data.script),
+        });
+
+        if (!audioResponse.ok) {
+          const audioError: { error?: string } = await audioResponse.json();
+          throw new Error(audioError.error ?? "No se pudo generar el audio.");
+        }
+
+        const audioBlob = await audioResponse.blob();
+        setAudioUrl(URL.createObjectURL(audioBlob));
+      } finally {
+        setIsGeneratingAudio(false);
+      }
     } catch (generationError) {
       setError(
         generationError instanceof Error
@@ -226,10 +267,16 @@ export default function Home() {
               <button
                 type="button"
                 onClick={generateScript}
-                disabled={files.length === 0 || isGenerating}
+                disabled={
+                  files.length === 0 || isGenerating || isGeneratingAudio
+                }
                 className="rounded-xl bg-violet-600 px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/20 transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:shadow-none"
               >
-                {isGenerating ? "Generando guion..." : "Generar Podcast"}
+                {isGenerating
+                  ? "Generando guion..."
+                  : isGeneratingAudio
+                    ? "Generando audio..."
+                    : "Generar Podcast"}
               </button>
             </div>
 
@@ -253,6 +300,20 @@ export default function Home() {
                 <pre className="whitespace-pre-wrap font-sans text-sm leading-7 text-slate-200">
                   {JSON.stringify(script, null, 2)}
                 </pre>
+
+                {isGeneratingAudio && (
+                  <p className="mt-5 text-sm text-violet-200">
+                    Generando audio...
+                  </p>
+                )}
+
+                {audioUrl && (
+                  <audio
+                    controls
+                    src={audioUrl}
+                    className="mt-5 w-full"
+                  />
+                )}
               </section>
             )}
 
